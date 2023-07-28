@@ -1,89 +1,163 @@
-/* Complete USB Joystick Example
-   Teensy becomes a USB joystick with 16 or 32 buttons and 6 axis input
-
-   You must select Joystick from the "Tools > USB Type" menu
-
-   Pushbuttons should be connected between the digital pins and ground.
-   Potentiometers should be connected to analog inputs 0 to 5.
-
-   This example code is in the public domain.
-*/
-
-// Configure the number of buttons.  Be careful not
-// to use a pin for both a digital button and analog
-// axis.  The pullup resistor will interfere with
-// the analog voltage.
 
 //https://www.pjrc.com/teensy/td_joystick.html
 
-const int numButtons = 16;  // 16 for Teensy, 32 for Teensy++
+////////////////////////////////////////////////////
+#define DEBUG 1
+#define BUTTON_COUNT 23
+
+typedef struct {
+  int pin;
+  int buttonID;
+  char state;
+  char oldState;
+} Button;
+
+//{teensy Pin Number, joystick number, pin state}
+Button buttons[BUTTON_COUNT] = {
+  { 0, 1, 0 },  //{teensy Pin Number, joystick number, pin state}
+  { 1, 2, 0 },
+  { 2, 3, 0 },
+  { 3, 4, 0 },
+  { 4, 5, 0 },
+  { 5, 6, 0 },
+  { 6, 7, 0 },
+  { 7, 8, 0 },
+  { 8, 9, 0 },
+  { 9, 10, 0 },
+  { 10, 11, 0 },
+  { 11, 12, 0 },
+  { 12, 13, 0 },
+  { 13, 14, 0 },
+  { 14, 15, 0 },
+  { 15, 16, 0 },
+  { 16, 17, 0 },
+  { 17, 18, 0 },
+  { 18, 19, 0 },
+  { 19, 20, 0 },
+  { 20, 21, 0 },
+  { 21, 22, 0 },
+  { 22, 23, 0 },
+};
+
+void InitButtons(void) {
+  for (int i = 0; i < BUTTON_COUNT; i++) {
+    pinMode(buttons[i].pin, INPUT_PULLUP);
+  }
+
+  delay(10);
+
+  for (int i = 0; i < BUTTON_COUNT; i++) {
+    if (digitalRead(buttons[i].pin)) {  //active low
+      buttons[i].oldState = 0;
+    } else {
+      buttons[i].oldState = 1;
+    }
+  }
+}
+
+void UpdateButtons(void) {
+  for (int i = 0; i < BUTTON_COUNT; i++) {
+    if (digitalRead(buttons[i].pin)) {  //active low
+      buttons[i].state = 0;
+    } else {
+      buttons[i].state = 1;
+    }
+
+#if (DEBUG)
+    if (buttons[i].oldState != buttons[i].state) {
+      Serial.print("Button ");
+      Serial.print(buttons[i].buttonID);
+
+      if (buttons[i].state)
+        Serial.println(" Released");
+      else
+        Serial.println(" Pressed");
+    }
+#endif
+
+    Joystick.button(buttons[i].buttonID, buttons[i].state);
+    buttons[i].oldState = buttons[i].state;
+  }
+}
+////////////////////////////////////////////////////
+
+typedef struct {
+  int clkPin;
+  int dirPin;
+  int counts;
+  char oldState;
+} Encoder;
+
+//{clk pin number, dir pin number, encoder count, old clk state}
+Encoder encoders[] = {
+  { 24, 25, 0, 0 },  //z axis
+  { 26, 27, 0, 0 },  //left slider
+  { 28, 29, 0, 0 },  //right slider
+};
+
+void InitEncoders(void) {
+  for (int i = 0; i < 3; i++) {
+    pinMode(encoders[i].dirPin, INPUT);
+    pinMode(encoders[i].clkPin, INPUT);
+  }
+
+  delay(10);
+
+  for (int i = 0; i < 3; i++) {
+    encoders[i].oldState = digitalRead(encoders[i].clkPin);
+  }
+}
+
+void UpdateEncoders(void) {
+  char tempState = 0;
+
+  for (int i = 0; i < 3; i++) {
+    tempState = digitalRead(encoders[i].clkPin);
+
+    if (tempState != encoders[i].oldState) {
+      if (digitalRead(encoders[i].dirPin)) {
+        encoders[i].counts++;
+      } else {
+        encoders[i].counts--;
+      }
+
+      if (encoders[i].counts > 1023)
+        encoders[i].counts = 0;
+
+      if (encoders[i].counts < 0)
+        encoders[i].counts = 1023;
+
+#if (DEBUG)
+      Serial.print("Encoder ");
+      Serial.print(i);
+      Serial.print(" Changed, count: ");
+      Serial.println(encoders[i].counts);
+#endif
+    }
+  }
+
+  Joystick.Zrotate(encoders[0].counts);  //[0,1023] 512 = center
+  Joystick.sliderLeft(encoders[1].counts);
+  Joystick.sliderRight(encoders[2].counts);
+}
+
+////////////////////////////////////////////////////
 
 void setup() {
-  // you can print to the serial monitor while the joystick is active!
   Serial.begin(9600);
-  // configure the joystick to manual send mode.  This gives precise
-  // control over when the computer receives updates, but it does
-  // require you to manually call Joystick.send_now().
   Joystick.useManualSend(true);
-  for (int i=0; i<numButtons; i++) {
-    pinMode(i, INPUT_PULLUP);
-  }
-  Serial.println("Begin Complete Joystick Test");
-}
 
-byte allButtons[numButtons];
-byte prevButtons[numButtons];
-int angle=0;
+  InitButtons();
+  InitEncoders();
+
+  Serial.println("Hey gamer, we're ready to game");
+}
 
 void loop() {
-  // read 6 analog inputs and use them for the joystick axis
-  Joystick.X(analogRead(0));
-  Joystick.Y(analogRead(1));
-  Joystick.Z(analogRead(2));
-  Joystick.Zrotate(analogRead(3));
-  Joystick.sliderLeft(analogRead(4));
-  Joystick.sliderRight(analogRead(5));
-  
-  // read digital pins and use them for the buttons
-  for (int i=0; i<numButtons; i++) {
-    if (digitalRead(i)) {
-      // when a pin reads high, the button is not pressed
-      // the pullup resistor creates the "on" signal
-      allButtons[i] = 0;
-    } else {
-      // when a pin reads low, the button is connecting to ground.
-      allButtons[i] = 1;
-    }
-    Joystick.button(i + 1, allButtons[i]);
-  }
+  UpdateButtons();
+  UpdateEncoders();
 
-  // make the hat switch automatically move in a circle
-  angle = angle + 1;
-  if (angle >= 360) angle = 0;
-  Joystick.hat(angle);
-  
-  // Because setup configured the Joystick manual send,
-  // the computer does not see any of the changes yet.
-  // This send_now() transmits everything all at once.
   Joystick.send_now();
-  
-  // check to see if any button changed since last time
-  boolean anyChange = false;
-  for (int i=0; i<numButtons; i++) {
-    if (allButtons[i] != prevButtons[i]) anyChange = true;
-    prevButtons[i] = allButtons[i];
-  }
-  
-  // if any button changed, print them to the serial monitor
-  if (anyChange) {
-    Serial.print("Buttons: ");
-    for (int i=0; i<numButtons; i++) {
-      Serial.print(allButtons[i], DEC);
-    }
-    Serial.println();
-  }
-  
-  // a brief delay, so this runs "only" 200 times per second
-  delay(5);
-}
 
+  delay(1000 / 200);  //200Hz update
+}
