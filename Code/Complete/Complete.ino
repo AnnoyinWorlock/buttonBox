@@ -37,6 +37,7 @@ Button buttons[BUTTON_COUNT] = {
   { 20, 21, 0 },
   { 21, 22, 0 },
   { 22, 23, 0 },
+  { 23, 24, 0 },
 };
 
 void InitButtons(void) {
